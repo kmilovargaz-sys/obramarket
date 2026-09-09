@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ObraMarket — Panel Interno</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore-compat.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel" data-presets="react">
+
+// ======================================================================
+// CONFIGURACIÓN DE FIREBASE — PEGA AQUÍ LAS MISMAS CREDENCIALES QUE
+// PUSISTE EN obramarket-cliente.jsx (deben ser del mismo proyecto).
+// ======================================================================
+const firebaseConfig = {
+  apiKey: "AIzaSyAzyoIoEgtFAGWjIUCLsBAjILTT0KPPGlg",
+  authDomain: "obramarket-eb28f.firebaseapp.com",
+  projectId: "obramarket-eb28f",
+  storageBucket: "obramarket-eb28f.firebasestorage.app",
+  messagingSenderId: "687534993083",
+  appId: "1:687534993083:web:7ce08d8babace8039c039e",
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+// ======================================================================
+
+// ---------- Paleta (misma que obramarket-cliente.jsx, para mantener identidad visual) ----------
+const COLOR = {
+  amarillo: "#F5B700",
+  ladrillo: "#B5451B",
+  fondo: "#EDE4D3",
+  grafito: "#2B2420",
+  grafitoSuave: "#7A6F62",
+  tarjeta: "#FFFBF2",
+  borde: "#DCCEB0",
+};
+const F_DISPLAY = "'Arial Black', 'Arial Narrow', sans-serif";
+const F_BODY = "'Helvetica Neue', Arial, sans-serif";
+
+// ---------- NOTA IMPORTANTE SOBRE SEGURIDAD ----------
+// La contraseña de abajo es una protección MÍNIMA, solo para que no cualquiera con
+// el link vea las cotizaciones de tus clientes. NO es seguridad real: cualquiera que
+// abra el código del archivo puede leerla. Para producción real, esto debe reemplazarse
+// por Firebase Authentication (login de verdad, con usuarios y permisos por Firestore
+// Rules) — dilo cuando quieras dar ese paso y lo armamos juntos.
+const CONTRASENA_TEMPORAL = "obramarket2026";
+
+function EstadoBadge({ estado }) {
+  const config = {
+    enviada: { color: "#7A6F62", bg: "rgba(122,111,98,0.12)", label: "Enviada" },
+    respondida: { color: "#B5451B", bg: "rgba(181,69,27,0.12)", label: "Respondida" },
+    aceptada: { color: "#F5B700", bg: "rgba(245,183,0,0.18)", label: "Aceptada" },
+    pagada: { color: "#2E7D32", bg: "rgba(46,125,50,0.12)", label: "Pagada" },
+  };
+  const c = config[estado] || config.enviada;
+  return (
+    <span style={{ fontSize: 11, fontWeight: 800, padding: "3px 9px", borderRadius: 20, background: c.bg, color: c.color }}>
+      {c.label}
+    </span>
+  );
+}
+
+function PanelInterno() {
+  const [autenticado, setAutenticado] = React.useState(false);
+  const [claveIngresada, setClaveIngresada] = React.useState("");
+  const [errorClave, setErrorClave] = React.useState(false);
+
+  const [cotizaciones, setCotizaciones] = React.useState([]);
+  React.useEffect(() => {
+    if (!autenticado) return;
+    const dejarDeEscuchar = db
+      .collection("cotizaciones")
+      .orderBy("fecha", "desc")
+      .onSnapshot(
+        (snapshot) => {
+          const datos = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+          setCotizaciones(datos);
+        },
+        (error) => console.error("Error conectando con Firebase:", error)
+      );
+    return () => dejarDeEscuchar();
+  }, [autenticado]);
+
+  const [respuestaTemp, setRespuestaTemp] = React.useState({});
+
+  function responderCotizacion(id) {
+    const respuesta = respuestaTemp[id];
+    if (!respuesta || !respuesta.precio) return;
+    db.collection("cotizaciones")
+      .doc(id)
+      .update({ estado: "respondida", precioTotal: respuesta.precio, notasAdmin: respuesta.notas || "" })
+      .catch((error) => console.error("Error respondiendo cotización:", error));
+  }
+
+  function intentarEntrar() {
+    if (claveIngresada === CONTRASENA_TEMPORAL) {
+      setAutenticado(true);
+      setErrorClave(false);
+    } else {
+      setErrorClave(true);
+    }
+  }
+
+  if (!autenticado) {
+    return (
+      <div style={{ fontFamily: F_BODY, background: COLOR.fondo, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <div style={{ background: COLOR.tarjeta, border: `1px solid ${COLOR.borde}`, borderRadius: 12, padding: 30, width: "min(320px, 90vw)" }}>
+          <div style={{ fontFamily: F_DISPLAY, fontWeight: 900, fontSize: 20, marginBottom: 4, textAlign: "center" }}>
+            OBRA<span style={{ color: COLOR.ladrillo }}>MARKET</span>
+          </div>
+          <div style={{ fontSize: 13, color: COLOR.grafitoSuave, textAlign: "center", marginBottom: 18 }}>Panel Interno</div>
+          <input
+            type="password"
+            placeholder="Contraseña"
+            value={claveIngresada}
+            onChange={(e) => setClaveIngresada(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && intentarEntrar()}
+            style={{ width: "100%", padding: "10px 12px", border: `1px solid ${COLOR.borde}`, borderRadius: 8, fontSize: 14, marginBottom: 10, boxSizing: "border-box" }}
+          />
+          {errorClave && <div style={{ color: COLOR.ladrillo, fontSize: 12.5, marginBottom: 10 }}>Contraseña incorrecta.</div>}
+          <button
+            onClick={intentarEntrar}
+            style={{ width: "100%", padding: "10px 12px", background: COLOR.amarillo, border: "none", borderRadius: 8, fontWeight: 800, fontSize: 14, cursor: "pointer" }}
+          >
+            Entrar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const pendientes = cotizaciones.filter((c) => c.estado === "enviada").length;
+
+  return (
+    <div style={{ fontFamily: F_BODY, background: COLOR.fondo, minHeight: "100vh", color: COLOR.grafito, paddingBottom: 40 }}>
+      <header style={{ background: COLOR.grafito, color: COLOR.fondo, padding: "18px 20px" }}>
+        <div style={{ maxWidth: 900, margin: "0 auto", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div style={{ fontFamily: F_DISPLAY, fontWeight: 900, fontSize: 22 }}>
+            OBRA<span style={{ color: COLOR.amarillo }}>MARKET</span> · Panel Interno
+          </div>
+          {pendientes > 0 && (
+            <div style={{ background: COLOR.amarillo, color: COLOR.grafito, borderRadius: 20, padding: "4px 12px", fontSize: 12.5, fontWeight: 800 }}>
+              {pendientes} pendiente{pendientes !== 1 ? "s" : ""}
+            </div>
+          )}
+        </div>
+      </header>
+
+      <div style={{ maxWidth: 900, margin: "0 auto", padding: "20px 16px" }}>
+        <div
+          style={{
+            background: "rgba(181,69,27,0.08)",
+            border: `1px solid ${COLOR.ladrillo}`,
+            borderRadius: 8,
+            padding: "10px 14px",
+            fontSize: 12.5,
+            color: COLOR.ladrillo,
+            marginBottom: 20,
+          }}
+        >
+          ⚠️ La contraseña de este panel es temporal, no es seguridad real todavía. No compartas este archivo fuera de tu equipo hasta tener login de verdad.
+        </div>
+
+        {cotizaciones.length === 0 && (
+          <div style={{ textAlign: "center", color: COLOR.grafitoSuave, fontSize: 14, padding: 50 }}>
+            Todavía no hay cotizaciones. Envía una de prueba desde obramarket-cliente — aparecerá aquí al instante, desde cualquier dispositivo.
+          </div>
+        )}
+
+        {cotizaciones.map((c) => (
+          <div key={c.id} style={{ border: `1px solid ${COLOR.borde}`, borderRadius: 10, padding: 16, marginBottom: 14, background: COLOR.tarjeta }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 12, color: COLOR.grafitoSuave }}>{new Date(c.fecha).toLocaleString()}</span>
+              <EstadoBadge estado={c.estado} />
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{c.contacto.nombre}</div>
+            <div style={{ fontSize: 12.5, color: COLOR.grafitoSuave, marginBottom: 8 }}>
+              {c.contacto.medio}: {c.contacto.dato} · {c.contacto.direccion}, {c.contacto.cp}
+            </div>
+            <div style={{ fontSize: 13, marginBottom: 4 }}>
+              <strong>{c.proyecto.tipo}</strong> — {c.proyecto.zona}
+            </div>
+            <div style={{ fontSize: 12.5, color: COLOR.grafitoSuave, marginBottom: 10 }}>Plazo: {c.plazo}</div>
+
+            <div style={{ borderTop: `1px solid ${COLOR.borde}`, paddingTop: 10, marginBottom: 10 }}>
+              {c.items.map((it) => (
+                <div key={it.id} style={{ fontSize: 13, display: "flex", justifyContent: "space-between", padding: "3px 0" }}>
+                  <span>{it.marca} — {it.nombre}</span>
+                  <span>×{it.cantidad}</span>
+                </div>
+              ))}
+              {c.extras.map((e, i) => (
+                <div key={i} style={{ fontSize: 13, fontStyle: "italic", padding: "3px 0" }}>
+                  {e} (fuera de catálogo)
+                </div>
+              ))}
+            </div>
+
+            {c.estado === "enviada" ? (
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <input
+                  type="number"
+                  placeholder="Precio total (€)"
+                  value={respuestaTemp[c.id]?.precio || ""}
+                  onChange={(e) => setRespuestaTemp((prev) => ({ ...prev, [c.id]: { ...prev[c.id], precio: e.target.value } }))}
+                  style={{ width: 130, padding: "9px 10px", border: `1px solid ${COLOR.borde}`, borderRadius: 8, fontSize: 13.5 }}
+                />
+                <input
+                  placeholder="Nota (opcional)"
+                  value={respuestaTemp[c.id]?.notas || ""}
+                  onChange={(e) => setRespuestaTemp((prev) => ({ ...prev, [c.id]: { ...prev[c.id], notas: e.target.value } }))}
+                  style={{ flex: 1, minWidth: 150, padding: "9px 10px", border: `1px solid ${COLOR.borde}`, borderRadius: 8, fontSize: 13.5 }}
+                />
+                <button
+                  onClick={() => responderCotizacion(c.id)}
+                  style={{ padding: "9px 16px", background: COLOR.amarillo, border: "none", borderRadius: 8, fontWeight: 800, fontSize: 13.5, cursor: "pointer" }}
+                >
+                  Enviar precio
+                </button>
+              </div>
+            ) : (
+              <div style={{ fontSize: 15, fontWeight: 800, color: COLOR.ladrillo }}>
+                {c.precioTotal} €{" "}
+                {c.notasAdmin && <span style={{ fontWeight: 400, fontSize: 12.5, color: COLOR.grafitoSuave }}>· {c.notasAdmin}</span>}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<PanelInterno />);
+</script>
+</body>
+</html>
